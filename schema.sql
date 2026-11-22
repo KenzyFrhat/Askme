@@ -17,6 +17,23 @@ CREATE TABLE IF NOT EXISTS Users (
         CHECK(length(password) = 8)
 );
 
+-- =========================
+-- CONVERSATIONS
+-- =========================
+
+CREATE TABLE IF NOT EXISTS Conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    creation_date TEXT DEFAULT CURRENT_TIMESTAMP,
+
+    User1_ID INTEGER NOT NULL
+        REFERENCES Users(id),
+
+    User2_ID INTEGER NOT NULL
+        REFERENCES Users(id),
+
+    CHECK(User1_ID != User2_ID)
+);
 
 -- =========================
 -- QUESTIONS
@@ -31,8 +48,12 @@ CREATE TABLE IF NOT EXISTS Questions (
     answer TEXT
         CHECK(answer IS NULL OR length(answer) <= 1000),
 
-    from_user_id INTEGER NOT NULL,
-    to_user_id INTEGER NOT NULL,
+    owner_ID INTEGER NOT NULL
+        REFERENCES Users(id),
+
+    conversation_ID INTEGER NOT NULL
+        REFERENCES Conversations(id)
+        ON DELETE CASCADE,
 
     datetime TEXT DEFAULT CURRENT_TIMESTAMP,
 
@@ -45,12 +66,6 @@ CREATE TABLE IF NOT EXISTS Questions (
     CHECK(parent_ID IS NULL OR parent_ID != id),
     CHECK(child_ID IS NULL OR child_ID != id),
 
-    FOREIGN KEY (from_user_id)
-        REFERENCES Users(id),
-
-    FOREIGN KEY (to_user_id)
-        REFERENCES Users(id),
-
     FOREIGN KEY (parent_ID)
         REFERENCES Questions(id)
         ON DELETE SET NULL,
@@ -60,9 +75,8 @@ CREATE TABLE IF NOT EXISTS Questions (
         ON DELETE SET NULL
 );
 
-
 -- =========================
--- DELETE TRIGGER
+-- TRIGGERS
 -- =========================
 
 CREATE TRIGGER IF NOT EXISTS reconnect_questions
@@ -78,4 +92,24 @@ BEGIN
     SET parent_ID = OLD.parent_ID
     WHERE id = OLD.child_ID;
 
+END;
+
+
+CREATE TRIGGER IF NOT EXISTS prevent_duplicate_conversation
+BEFORE INSERT ON Conversations
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, 'Conversation already exists')
+    WHERE EXISTS (
+        SELECT 1
+        FROM Conversations
+        WHERE User1_ID = NEW.User1_ID
+          AND User2_ID = NEW.User2_ID
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM Conversations
+        WHERE User1_ID = NEW.User2_ID
+          AND User2_ID = NEW.User1_ID
+    );
 END;
